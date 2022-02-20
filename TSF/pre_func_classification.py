@@ -1,0 +1,140 @@
+import argparse
+
+from sktime.classification.interval_based import TimeSeriesForestClassifier
+from sktime.classification.interval_based import CanonicalIntervalForest
+from sktime.classification.shapelet_based import ShapeletTransformClassifier
+from sktime.contrib.vector_classifiers._rotation_forest import RotationForest
+from sktime.datasets import load_UCR_UEA_dataset
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import numpy as np
+import pandas as pd
+import time
+
+
+
+def load_raw_ts(path, dataset):
+    path = path + "raw/" + dataset + "/"
+    # 训练集
+    x_train = np.load(path + 'X_train.npy')
+    x_train = np.transpose(x_train, axes=(0, 2, 1))
+    x_test = np.load(path + 'X_test.npy')
+    x_test = np.transpose(x_test, axes=(0, 2, 1))
+    y_train = np.load(path + 'y_train.npy')
+    y_test = np.load(path + 'y_test.npy')
+    labels = np.concatenate((y_train, y_test), axis=0)
+    nclass = int(np.amax(labels)) + 1
+    return x_train, x_test, y_train.reshape(-1), y_test.reshape(-1), nclass
+
+
+parser = argparse.ArgumentParser()
+# dataset settings
+parser.add_argument('--data_path', type=str, default="D://tmppro//data//",
+                    help='the path of data.')
+parser.add_argument('--dataset', type=str, default="NATOPS",  # NATOPS
+                    help='time series dataset. Options: See the datasets list')
+parser.add_argument('--times', type=int, default=5, help='times to repeat')
+args = parser.parse_args()
+
+
+def run(times):
+    # loading data
+    print("loading data...")
+    # load_raw_ts(args.data_path, args.dataset)
+    data_train, data_test, target_train, target_test, nclass = load_raw_ts(args.data_path, args.dataset)
+    print("data loaded")
+    # train
+    print("training...")
+    # trainsize dim length
+    total_cor_matrix = []
+    for train_size in range(data_train.shape[0]):
+        # print(data_train[train_size].shape)
+        #     计算两两维度之间的皮尔逊系数
+        dim = data_train[train_size].shape[0]
+        cor_matrix = abs(np.corrcoef(data_train[train_size]))
+        cor_matrix = np.where(cor_matrix >= 0.8, cor_matrix, 0)
+        total_cor_matrix.append(cor_matrix)
+    total_cor_matrix = np.array(total_cor_matrix)
+
+    sum_cor_matrix = np.zeros(shape=(total_cor_matrix.shape[1], total_cor_matrix.shape[2]))
+    for x in range(total_cor_matrix.shape[0]):
+        sum_cor_matrix += total_cor_matrix[x]
+    # print(sum_cor_matrix.shape)
+    avg_cor_matrix = sum_cor_matrix / (sum_cor_matrix.sum() / (sum_cor_matrix.shape[0] * sum_cor_matrix.shape[1]))
+    de_avg_cor_matrix = avg_cor_matrix / avg_cor_matrix[0][0]
+    judge_cor_matrix = np.zeros(shape=(de_avg_cor_matrix.shape[0], de_avg_cor_matrix.shape[1]))
+    for i in range(de_avg_cor_matrix.shape[0]):
+        judge_line = de_avg_cor_matrix[i].sum() / de_avg_cor_matrix[i].shape
+        for j in range(de_avg_cor_matrix.shape[1]):
+            if de_avg_cor_matrix[i][j] >= judge_line:
+                judge_cor_matrix[i][j] = 1
+            else:
+                judge_cor_matrix[i][j] = 0
+    # 该矩阵就是哪一维度相关就乘以1或0，权重参数设置为1/维度
+    # print(judge_cor_matrix)
+
+    # CAWPE
+    pro_cor_matrix = np.zeros(shape=(judge_cor_matrix.shape[0]))
+    for i in range(judge_cor_matrix.shape[0]):
+        s = np.sum(judge_cor_matrix[i])
+        if s != 0:
+            pro_cor_matrix[i] = s/judge_cor_matrix.shape[1]
+
+    # 分类器
+
+    data_train = data_train.transpose((1, 0, 2))
+    data_test = data_test.transpose((1, 0, 2))
+    pro_matrix = []
+    # 180,6
+    classifier = TimeSeriesForestClassifier()
+    # classifier = CanonicalIntervalForest()
+
+    for i in range(data_train.shape[0]):
+        tmp_matrix = np.zeros(shape=(data_train.shape[1], 1, data_train.shape[2]))
+        for j in range(data_train.shape[1]):
+            length = data_train.shape[2]
+            tmpSeries = [pd.Series(data_train[i][j], index=[a for a in range(length)], dtype='float32')]
+            tmp_matrix[j] = tmpSeries
+        # print(tmp_matrix)
+        classifier.fit(tmp_matrix, target_train)
+
+        tmp_matrix2 = np.zeros(shape=(data_test.shape[1], 1, data_test.shape[2]))
+        for j in range(data_test.shape[1]):
+            length = data_test.shape[2]
+            tmpSeries = [pd.Series(data_test[i][j], index=[a for a in range(length)], dtype='float32')]
+            tmp_matrix2[j] = tmpSeries
+        pro = classifier.predict_proba(tmp_matrix2)
+        pro_matrix.append(pro)
+        # (180, 6)
+        # print(pro.shape)
+    pro_matrix = np.array(pro_matrix)
+    pro_matrix = pro_matrix.transpose((1, 0, 2))
+    final_pro_matrix = []
+    for i in range(pro_matrix.shape[0]):
+        dim = pro_matrix.shape[1]
+        tmp_m = np.zeros(shape=nclass)
+        for b in range(dim):
+            tmp_ma = np.zeros(shape=nclass)
+            for j in range(dim):
+                if judge_cor_matrix[b][j] == 1:
+                    tmp_ma += pro_matrix[i][j] * pro_cor_matrix[b]
+            tmp_m += tmp_ma
+        final_pro_matrix.append(tmp_m)
+    final_pro_matrix = np.array(final_pro_matrix)
+    lb = np.asarray([[np.argmax(prob)] for prob in final_pro_matrix])
+    print("model trained")
+    print(args.dataset + "score = ")
+    sc = accuracy_score(target_test, lb)
+    print(sc)
+    print("saving score")
+
+    # path to save
+    s = 'TSF/' + str(times) + '.csv'
+    f = open(s, 'a')
+    f.write(args.dataset + ',' + str(sc) + ',' + '\n')
+    f.close()
+    print("score saved")
+
+
+for i in range(0,args.times):
+    run(i)
