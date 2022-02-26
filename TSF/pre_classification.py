@@ -117,8 +117,8 @@ def run(times):
     data_test = data_test.transpose((1, 0, 2))
     pro_matrix = []
     # 180,6
-    classifier = TimeSeriesForestClassifier()
-    # classifier = CanonicalIntervalForest()
+    # classifier = TimeSeriesForestClassifier()
+    classifier = CanonicalIntervalForest()
 
     for i in range(data_train.shape[0]):
         # 先对每个维度进行训练
