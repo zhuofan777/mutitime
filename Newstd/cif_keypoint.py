@@ -4,18 +4,17 @@ from random import randint
 
 import numpy as np
 from sklearn.metrics import accuracy_score
-from sktime.datasets import load_unit_test
 
-import random_wid_fit
-from _mycif import NewCanonicalIntervalForest
+import _mycif
+import diffStd
 
-# CIF的
+# 通过cif和关键点结合
 
 parser = argparse.ArgumentParser()
 # dataset settings
 parser.add_argument('--data_path', type=str, default="D://tmppro//data//",
                     help='the path of data.')
-parser.add_argument('--dataset', type=str, default="BasicMotions",  # NATOPS
+parser.add_argument('--dataset', type=str, default="SelfRegulationSCP2",  # NATOPS
                     help='time series dataset. Options: See the datasets list')
 parser.add_argument('--times', type=int, default=5, help='times to repeat')
 args = parser.parse_args()
@@ -26,16 +25,16 @@ def isUseful(a):
     dic = {}
     for i in a:
         if i in dic.keys():
-            dic[i]+=1
+            dic[i] += 1
         else:
-            dic[i]=1
+            dic[i] = 1
     res = ""
     for key in dic:
         res = key
         break
     res = dic[res]
     for key in dic:
-        if dic[key]!=res:
+        if dic[key] != res:
             return True
     return False
 
@@ -59,45 +58,69 @@ def run(times):
     print("data loaded")
     # correlation
     print("computing correlation...")
-    # print(data_train.shape)
-    # X_train, y_train = load_unit_test(split="train", return_X_y=True)
-    # print(X_train.shape)
-    # X_test, y_test = load_unit_test(split="test", return_X_y=True)
 
-    # WARNING!!!!!!!
-    # n_instances, n_dimensions, series_length
-
-    # print(data_train.shape)
     total_cor_matrix = []
-    for train_size in range(data_train.shape[0]):
-        # print(data_train[train_size].shape)
-        #     计算两两维度之间的皮尔逊系数
-        dim = data_train[train_size].shape[0]
-        rd_wd = random_wid_fit.create_window(data_train.shape[1])
-        wd_mt = random_wid_fit.split_mt(rd_wd, data_train[train_size])
-        # print(wd_mt)
-        # print("......................")
-        # wd_mt 维度 * (序列被拆分为 shape[1] * 对应长度)
 
-        cor_matrix = np.zeros(shape=(wd_mt.shape[0], wd_mt.shape[0]))
-        m = wd_mt.shape[1]
-        # rad = randint(int(math.sqrt(m)), m)
+    # 每个测试集
+    wd_mt = []
+    for i in range(data_train.shape[0]):
+        # 每个维度
+        window_pool = []
+        for j in range(data_train.shape[1]):
+            # 做两次局部标准差提取和一个最大点提取
+            #  b = 100
+            a = diffStd.gen_std(data_train[i][j], 60)
+            a = diffStd.gen_std(a, 60)
+            #  a = 0.4
+            points = diffStd.gen_points(data_train[i][j], 0.3)
+            keys = diffStd.gen_keys(data_train[i][j], points)
+            windows = diffStd.gen_window(data_train[i][j], keys, 1)
+            window_pool += windows
+        window_pool = list(set([tuple(t) for t in window_pool]))
+        window_pool = [list(v) for v in window_pool]
+        wd_mt.append(window_pool)
+
+    # wd_mt train_size,windows_nums,windows_size
+    # # print(wd_mt)
+    total_cor_matrix = []
+    for i in range(data_train.shape[0]):
+        window_pool = wd_mt[i]
+        wpl = len(window_pool)
+        # print(window_pool)
+        all_dim_pool = []
+        # 维度
+        for d in range(data_train.shape[1]):
+            # 窗口数
+            data_pool = []
+            for j in range(wpl):
+                window = window_pool[j]
+                data_window = []
+                # 窗口大小
+                for k in window:
+                    data_window.append(data_train[i][d][k])
+                    # print(data_train[i][d][k])
+                data_pool.append(data_window)
+            data_pool = np.array(data_pool)
+            all_dim_pool.append(data_pool)
+        #  维度 * 窗口 * 窗口大小
+        all_dim_pool = np.array(all_dim_pool)
+        # print(all_dim_pool.shape)
+
+        # 创建一个维度*维度的空矩阵
+        cor_matrix = np.zeros(shape=(data_train.shape[1], data_train.shape[1]))
 
         # 窗口数
-        # for i in range(wd_mt.shape[1]):
-        for i in range(wd_mt.shape[1]):
+        for i in range(all_dim_pool.shape[1]):
             tp_m = []
-            rad = randint(0, m-1)
-            for j in range(wd_mt.shape[0]):
-                tp_m.append(wd_mt[j][rad])
+            for j in range(all_dim_pool.shape[0]):
+                tp_m.append(all_dim_pool[j][i])
             s_cor_matrix = abs(np.corrcoef(tp_m))
             cor_matrix += s_cor_matrix
-        # print(cor_matrix)
-        cor_matrix /= wd_mt.shape[1]
-        # cor_matrix /= rad
+        cor_matrix /= all_dim_pool.shape[1]
         cor_matrix = np.where(cor_matrix >= 0.8, cor_matrix, 0)
         total_cor_matrix.append(cor_matrix)
-    print(total_cor_matrix.shape)
+    total_cor_matrix = np.array(total_cor_matrix)
+    #
     sum_cor_matrix = np.zeros(shape=(total_cor_matrix.shape[1], total_cor_matrix.shape[2]))
     for x in range(total_cor_matrix.shape[0]):
         sum_cor_matrix += total_cor_matrix[x]
@@ -127,8 +150,8 @@ def run(times):
     # 用于输出相关矩阵
     ans = isUseful(dim_pool)
     # print(ans)
-    if ans and times==2:
-        s = 'D://tmppro//cif_tmp//44.txt'
+    if ans and times == 2:
+        s = 'D://tmppro//keypoint//1.txt'
         f = open(s, 'a')
         f.write(args.dataset + ',' + str(dim_pool) + ',' + '\n')
         f.close()
@@ -142,24 +165,25 @@ def run(times):
     #
     # train
     print("training...")
-    clf = NewCanonicalIntervalForest(dim_pool=dim_pool)
-    clf.fit(data_train, target_train)
-    NewCanonicalIntervalForest(...)
-    y_pred = clf.predict(data_test)
-    sc = accuracy_score(target_test, y_pred)
-    print("trained,accuracy is:")
-    print(sc)
-    print("saving score")
+    if ans:
+        clf = _mycif.NewCanonicalIntervalForest(dim_pool=dim_pool)
+        clf.fit(data_train, target_train)
+        _mycif.NewCanonicalIntervalForest(...)
+        y_pred = clf.predict(data_test)
+        sc = accuracy_score(target_test, y_pred)
+        print("trained,accuracy is:")
+        print(sc)
+        print("saving score")
 
-    # path to save
+        # path to save
 
-    s = 'D://tmppro//cif_tmp//' + str(times) + '.csv'
-    # s = 'D://tmppro//cif_tmp//' + '0' + '.csv'
-    f = open(s, 'a')
-    f.write(args.dataset + ',' + str(sc) + ',' + '\n')
-    f.close()
-    print("score saved")
-    #
+        s = 'D://tmppro//keypoint//' + str(times) + '.csv'
+        # s = 'D://tmppro//cif_tmp//' + '0' + '.csv'
+        f = open(s, 'a')
+        f.write(args.dataset + ',' + str(sc) + ',' + '\n')
+        f.close()
+        print("score saved")
+
 
 
 for i in range(0, args.times):

@@ -23,6 +23,7 @@ def create_window(s_length):
         else:
             i += -1
         window_list.pop()
+
     # print(window_list)
     return window_list
 
