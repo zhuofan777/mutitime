@@ -98,7 +98,20 @@ def run(times):
     cluster = {}
     sax_list = []
     for v in range(0, sax.shape[0]):
-        sax_list.append(list(sax[v][0].values))
+        add = [0, 0, 0, 0]
+        tag = sax[v][0].index
+        res = list(sax[v][0].values)
+        for i in range(0, len(tag)):
+            if tag[i] == 'a':
+                add[0] += res[i]
+            elif tag[i] == 'b':
+                add[1] += res[i]
+            elif tag[i] == 'c':
+                add[2] += res[i]
+            elif tag[i] == 'd':
+                add[3] += res[i]
+        sax_list.append(add)
+    # print(sax_list)
     for a in range(0, len(sax_list)):
         for b in range(a, len(sax_list)):
             if a == b:
@@ -140,7 +153,7 @@ def run(times):
     old_to_new = {}
     dim_choose.sort()
     print(dim_choose)
-    for i in range(0,len(dim_choose)):
+    for i in range(0, len(dim_choose)):
         old_to_new[i] = dim_choose[i]
 
     # correlation
