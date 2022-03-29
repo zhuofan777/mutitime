@@ -173,7 +173,7 @@ class NewCanonicalIntervalForest(BaseClassifier):
         elif isinstance(self.base_estimator, BaseEstimator):
             self._base_estimator = self.base_estimator
         else:
-            raise ValueError("DrCIF invalid base estimator given.")
+            raise ValueError("DrCIF invalid base.py estimator given.")
 
         if self.n_intervals is None:
             self._n_intervals = int(
@@ -340,7 +340,7 @@ class NewCanonicalIntervalForest(BaseClassifier):
     def _temporal_importance_curves(self, normalise_time_points=False):
         if not isinstance(self._base_estimator, ContinuousIntervalTree):
             raise ValueError(
-                "CIF base estimator for temporal importance curves must"
+                "CIF base.py estimator for temporal importance curves must"
                 " be ContinuousIntervalTree."
             )
 
