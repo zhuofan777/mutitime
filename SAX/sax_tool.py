@@ -15,6 +15,6 @@ def computeSim(m1, m2):
     c = abs(m1[2] - m2[2])
     d = abs(m1[3] - m2[3])
     s = int(a + b + c + d)
-    if s / cnt <= 0.4:
+    if s / cnt <= 0.5:
         return True
     return False
