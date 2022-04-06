@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser()
 # dataset settings
 parser.add_argument('--data_path', type=str, default="D://tmppro//data//",
                     help='the path of data.')
-parser.add_argument('--dataset', type=str, default="ArticularyWordRecognition",  # NATOPS
+parser.add_argument('--dataset', type=str, default="BasicMotions",  # NATOPS
                     help='time series dataset. Options: See the datasets list')
 parser.add_argument('--times', type=int, default=5, help='times to repeat')
 args = parser.parse_args()
@@ -89,58 +89,93 @@ def run(times):
     # reduction
     print("starting dims reduction")
     random.seed(int(time.time()))
-    rd_sample = random.choice(data_train)
+    dim_relation = [[0] * dim_nums] * dim_nums
+    for s in range(0, sample_nums):
+        sample = data_train[s]
+        sax = computeSax(sample)
+        sax = sax.values
+        # sax里面是series，要转成ndarray
 
-    sax = computeSax(rd_sample)
-    sax = sax.values
-    # sax里面是series，要转成ndarray
-
-    cluster = {}
-    sax_list = []
-    for v in range(0, sax.shape[0]):
-        add = [0, 0, 0, 0]
-        tag = sax[v][0].index
-        res = list(sax[v][0].values)
-        for i in range(0, len(tag)):
-            if tag[i] == 'a':
-                add[0] += res[i]
-            elif tag[i] == 'b':
-                add[1] += res[i]
-            elif tag[i] == 'c':
-                add[2] += res[i]
-            elif tag[i] == 'd':
-                add[3] += res[i]
-        sax_list.append(add)
-    # print(sax_list)
-    for a in range(0, len(sax_list)):
-        for b in range(a, len(sax_list)):
+        sax_list = []
+        for v in range(0, sax.shape[0]):
+            add = [0, 0, 0, 0]
+            tag = sax[v][0].index
+            res = list(sax[v][0].values)
+            for i in range(0, len(tag)):
+                if tag[i] == 'a':
+                    add[0] += res[i]
+                elif tag[i] == 'b':
+                    add[1] += res[i]
+                elif tag[i] == 'c':
+                    add[2] += res[i]
+                elif tag[i] == 'd':
+                    add[3] += res[i]
+            sax_list.append(add)
+        # print(sax_list)
+        for a in range(0, len(sax_list)):
+            for b in range(a, len(sax_list)):
+                if a == b:
+                    continue
+                sim = computeSim(sax_list[a], sax_list[b])
+                # print(sim)
+                if sim:
+                    dim_relation[a][b] += 1
+    dim_list = []
+    for a in range(0, dim_nums):
+        for b in range(a, dim_nums):
             if a == b:
                 continue
-            sim = computeSim(sax_list[a], sax_list[b])
-            # print(sim)
-            if sim:
-                if a in cluster:
-                    cluster[a].append(b)
-                else:
-                    cluster[a] = [b]
-    for v in cluster:
-        cluster[v].append(v)
-    # print(cluster)
-    dim_all = []
-    for a in cluster:
-        for n in cluster[a]:
-            dim_all.append(n)
+            dim_list.append([a, b, dim_relation[a][b]])
+    # print(dim_list)
+    dim_list.sort(key=lambda t: t[2], reverse=True)
+    # 删减
+    dim_list = dim_list[:min(len(dim_list), int(len(dim_list) * 0.5) + 1)]
+    # print(dim_list)
+    cluster = {}
+    for v in dim_list:
+        if v[0] in cluster:
+            cluster[v[0]].append(v[1])
+        else:
+            cluster[v[0]] = [v[1]]
+
+    # print(dim_list)
+    print(cluster)
     dim_choose = []
+    check_dim_choose = [False]*dim_nums
 
-    for a in range(0, dim_nums):
-        if a not in cluster and a not in dim_all:
-            dim_choose.append(a)
-
-    for v in cluster:
-        dim_choose.append(random.choice(cluster[v]))
+    for k in cluster.keys():
+        # 随机选择一个值
+        a = cluster[k]
+        a.append(k)
+        v = random.choice(a)
+        cnt = 0
+        while check_dim_choose[v]:
+            v = random.choice(a)
+            cnt += 1
+            if cnt >= 10:
+                break
+        dim_choose.append(v)
+        check_dim_choose[v] = True
+        check_dim_choose[k] = True
+        for s in cluster[k]:
+            check_dim_choose[s] = True
+    for v in range(0,len(check_dim_choose)):
+        if not check_dim_choose[v]:
+            dim_choose.append(v)
     dim_choose = list(set(dim_choose))
+    dim_choose.sort()
+    # print(check_dim_choose)
     # print(dim_choose)
-
+    #
+    # for a in range(0, dim_nums):
+    #     if a not in cluster and a not in dim_all:
+    #         dim_choose.append(a)
+    #
+    # for v in cluster:
+    #     dim_choose.append(random.choice(cluster[v]))
+    # dim_choose = list(set(dim_choose))
+    # # print(dim_choose)
+    #
     # change dataset
     data_train = data_train.transpose((1, 0, 2))
     data_train_tmp = []
@@ -269,7 +304,7 @@ def run(times):
     #
     # train
     print("training...")
-    clf = _mycif.NewCanonicalIntervalForest(dim_pool=dim_pool)
+    clf = _mycif.NewCanonicalIntervalForest(dim_pool=dim_pool,n_jobs=-1)
     clf.fit(res_data_train, target_train)
     _mycif.NewCanonicalIntervalForest(...)
     y_pred = clf.predict(data_test)
