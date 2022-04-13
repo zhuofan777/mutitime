@@ -885,8 +885,9 @@ class SFA(_PanelToPanelTransformer):
                     # print(bp)
                     # word = (word << letter_bits) | bp
                     word = wordls[bp]
+                    # print(word2)
                     break
-        print(word)
+
         return word
 
     def _create_word_large(self, dft):

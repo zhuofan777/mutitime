@@ -2,6 +2,7 @@ import argparse
 import math
 import random
 import time
+from collections import Counter
 from random import randint
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -129,6 +130,7 @@ def run(times):
     # print(dim_list)
     dim_list.sort(key=lambda t: t[2], reverse=True)
     # 删减
+    # TODO 这里只取了前一般的出现的概率
     dim_list = dim_list[:min(len(dim_list), int(len(dim_list) * 0.5) + 1)]
     # print(dim_list)
     cluster = {}
@@ -138,28 +140,41 @@ def run(times):
         else:
             cluster[v[0]] = [v[1]]
 
+    # 选取leader，通过list统计一下
+    leader_list = []
+    for i in cluster:
+        leader_list.append(i)
+        for j in cluster[i]:
+            leader_list.append(j)
+    counter = Counter(leader_list)
+    # print(counter)
     # print(dim_list)
-    print(cluster)
+    # print(cluster)
     dim_choose = []
-    check_dim_choose = [False]*dim_nums
+    check_dim_choose = [False] * dim_nums
 
     for k in cluster.keys():
-        # 随机选择一个值
-        a = cluster[k]
-        a.append(k)
-        v = random.choice(a)
-        cnt = 0
-        while check_dim_choose[v]:
-            v = random.choice(a)
-            cnt += 1
-            if cnt >= 10:
+        tmpl = [k]
+        for a in cluster[k]:
+            tmpl.append(a)
+        choselst = []
+        for a in tmpl:
+            choselst.append([a, counter[a]])
+        choselst.sort(key=lambda x: x[1], reverse=True)
+        # print(choselst)
+        pkidx = 0
+        while True:
+            if not check_dim_choose[choselst[pkidx][0]]:
+                dim_choose.append(choselst[pkidx][0])
                 break
-        dim_choose.append(v)
-        check_dim_choose[v] = True
+            else:
+                pkidx += 1
+                if pkidx == len(choselst):
+                    break
         check_dim_choose[k] = True
-        for s in cluster[k]:
-            check_dim_choose[s] = True
-    for v in range(0,len(check_dim_choose)):
+        for v in cluster[k]:
+            check_dim_choose[v] = True
+    for v in range(0, len(check_dim_choose)):
         if not check_dim_choose[v]:
             dim_choose.append(v)
     dim_choose = list(set(dim_choose))
@@ -304,7 +319,7 @@ def run(times):
     #
     # train
     print("training...")
-    clf = _mycif.NewCanonicalIntervalForest(dim_pool=dim_pool,n_jobs=-1)
+    clf = _mycif.NewCanonicalIntervalForest(dim_pool=dim_pool, n_jobs=-1)
     clf.fit(res_data_train, target_train)
     _mycif.NewCanonicalIntervalForest(...)
     y_pred = clf.predict(data_test)
