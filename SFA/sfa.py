@@ -26,6 +26,7 @@ from sktime.utils.validation.panel import check_X
 # The binning methods to use: equi-depth, equi-width, information gain or kmeans
 binning_methods = {"equi-depth", "equi-width", "information-gain", "kmeans"}
 
+
 # TODO remove imag-part from dc-component component
 
 
@@ -107,24 +108,24 @@ class SFA(_PanelToPanelTransformer):
     _tags = {"univariate-only": True}
 
     def __init__(
-        self,
-        word_length=8,
-        alphabet_size=4,
-        window_size=12,
-        norm=False,
-        binning_method="equi-depth",
-        anova=False,
-        bigrams=False,
-        skip_grams=False,
-        remove_repeat_words=False,
-        levels=1,
-        lower_bounding=True,
-        save_words=False,
-        keep_binning_dft=False,
-        return_pandas_data_series=False,
-        use_fallback_dft=False,
-        typed_dict=False,
-        n_jobs=1,
+            self,
+            word_length=8,
+            alphabet_size=4,
+            window_size=12,
+            norm=False,
+            binning_method="equi-depth",
+            anova=False,
+            bigrams=False,
+            skip_grams=False,
+            remove_repeat_words=False,
+            levels=1,
+            lower_bounding=True,
+            save_words=False,
+            keep_binning_dft=False,
+            return_pandas_data_series=False,
+            use_fallback_dft=False,
+            typed_dict=False,
+            n_jobs=1,
     ):
         self.words = []
         self.breakpoints = []
@@ -253,7 +254,7 @@ class SFA(_PanelToPanelTransformer):
         -------
         List of dictionaries containing SFA words
         """
-        # self.check_is_fitted()
+        self.check_is_fitted()
         X = check_X(X, enforce_univariate=True, coerce_to_numpy=True)
         X = X.squeeze(1)
 
@@ -268,6 +269,8 @@ class SFA(_PanelToPanelTransformer):
             )
 
         dim, words = zip(*transform)
+        # print(dim, words)
+
         if self.save_words:
             self.words = list(words)
 
@@ -312,7 +315,8 @@ class SFA(_PanelToPanelTransformer):
         last_word = -1
         repeat_words = 0
         words = (
-            np.zeros(dfts.shape[0], dtype=np.int64)
+            # np.zeros(dfts.shape[0], dtype=np.int64)
+            [''] * dfts.shape[0]
             if self.word_bits <= 64
             else [0 for _ in range(dfts.shape[0])]
         )
@@ -332,7 +336,7 @@ class SFA(_PanelToPanelTransformer):
                 )
             )
             words[window] = word_raw
-
+            # print(words)
             repeat_word = (
                 self._add_to_pyramid(
                     bag, word_raw, last_word, window - int(repeat_words / 2)
@@ -381,7 +385,7 @@ class SFA(_PanelToPanelTransformer):
             for key, val in bag.items():
                 pdict[key] = val
             bag = pdict
-
+        # print(words)
         return [
             pd.Series(bag) if self.return_pandas_data_series else bag,
             words if self.save_words else [],
@@ -503,7 +507,7 @@ class SFA(_PanelToPanelTransformer):
             ),
         )
         start = self.series_length - self.window_size
-        split[-1] = series[start : self.series_length]
+        split[-1] = series[start: self.series_length]
 
         result = np.zeros((len(split), self.dft_length), dtype=np.float64)
 
@@ -560,13 +564,13 @@ class SFA(_PanelToPanelTransformer):
     @staticmethod
     @njit(fastmath=True, cache=True)
     def _discrete_fourier_transform(
-        series,
-        dft_length,
-        norm,
-        inverse_sqrt_win_size,
-        lower_bounding,
-        apply_normalising_factor=True,
-        cut_start_if_norm=True,
+            series,
+            dft_length,
+            norm,
+            inverse_sqrt_win_size,
+            lower_bounding,
+            apply_normalising_factor=True,
+            cut_start_if_norm=True,
     ):
         """Perform a discrete fourier transform using standard O(n^2) transform.
 
@@ -625,7 +629,7 @@ class SFA(_PanelToPanelTransformer):
         # first run with dft
         if self.use_fallback_dft:
             mft_data = self._discrete_fourier_transform(
-                series[0 : self.window_size],
+                series[0: self.window_size],
                 self.dft_length,
                 self.norm,
                 self.inverse_sqrt_win_size,
@@ -676,7 +680,7 @@ class SFA(_PanelToPanelTransformer):
     @staticmethod
     @njit(fastmath=True, cache=True)
     def _iterate_mft(
-        series, mft_data, phis, window_size, stds, transformed, inverse_sqrt_win_size
+            series, mft_data, phis, window_size, stds, transformed, inverse_sqrt_win_size
     ):
         for i in range(1, len(transformed)):
             for n in range(0, len(mft_data), 2):
@@ -849,7 +853,7 @@ class SFA(_PanelToPanelTransformer):
     @staticmethod
     @njit(fastmath=True, cache=True)
     def _add_level(
-        word, start, level, window_ind, window_size, series_length, level_bits
+            word, start, level, window_ind, window_size, series_length, level_bits
     ):
         num_quadrants = pow(2, level)
         quadrant = start + int(
@@ -878,24 +882,25 @@ class SFA(_PanelToPanelTransformer):
     @njit(fastmath=True, cache=True)
     def _create_word(dft, word_length, alphabet_size, breakpoints, letter_bits):
         word = np.int64(0)
-        wordls = ['a', 'b', 'c', 'd', 'e']
+        wordls = ''
+        alph = 'abcd'
         for i in range(word_length):
             for bp in range(alphabet_size):
                 if dft[i] <= breakpoints[i][bp]:
-                    # print(bp)
-                    # word = (word << letter_bits) | bp
-                    word = wordls[bp]
-                    # print(word2)
+                    word = (word << letter_bits) | bp
+                    wordls += alph[bp]
                     break
-
-        return word
+        # print(wordls)
+        return wordls
 
     def _create_word_large(self, dft):
         word = 0
+
         for i in range(self.word_length):
             for bp in range(self.alphabet_size):
                 if dft[i] <= self.breakpoints[i][bp]:
                     word = (word << self.letter_bits) | bp
+
                     break
 
         return word
@@ -917,8 +922,8 @@ class SFA(_PanelToPanelTransformer):
             series_sum += series[w + window_size - 1] - series[w - 1]
             mean = series_sum * r_window_length
             square_sum += (
-                series[w + window_size - 1] * series[w + window_size - 1]
-                - series[w - 1] * series[w - 1]
+                    series[w + window_size - 1] * series[w + window_size - 1]
+                    - series[w - 1] * series[w - 1]
             )
             buf = math.sqrt(square_sum * r_window_length - mean * mean)
             stds[w] = buf if buf > 1e-8 else 1
@@ -1028,8 +1033,15 @@ class SFA(_PanelToPanelTransformer):
         return letters
 
     @classmethod
-    def get_test_params(cls):
+    def get_test_params(cls, parameter_set="default"):
         """Return testing parameter settings for the estimator.
+
+        Parameters
+        ----------
+        parameter_set : str, default="default"
+            Name of the set of test parameters to return, for use in tests. If no
+            special parameters are defined for a value, will return `"default"` set.
+
 
         Returns
         -------
