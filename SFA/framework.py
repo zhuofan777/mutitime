@@ -182,59 +182,104 @@ def run(times):
     dim_choose.sort()
 
     # sfa
-    dim_dic = []
-    for i in range(dim_nums):
-        cll = collections.defaultdict(int)
-        dim_dic.append(cll)
+    dim_relation = [[0 for j in range(dim_nums)] for i in range(dim_nums)]
     # print(dim_dic)
     for i in range(sample_nums):
         sample = data_train[i]
         a = sfa.SFA(n_jobs=-1)
         a.fit(sample)
         b = a.transform(sample, data_test)
-
+        dim_dic = [collections.defaultdict(int) for i in range(dim_nums)]
         #
         for j in range(dim_nums):
             dt = b[0][j]
             for k in dt:
                 # print(k,dt[k])
                 dim_dic[j][k] += dt[k]
-            # print("----------------------")
-            # print(dim_dic)
-    # print(dim_dic)
-    dim_alphat_list = []
-    for i in range(dim_nums):
-        dim_col = dim_dic[i]
-        # print(dim_col)
-        tmplist = []
-        for j in dim_col:
-            tmplist.append(j * dim_col[j])
-        dim_alphat_list.append(Counter(''.join(tmplist)))
+
+
+        dim_alphat_list = []
+        for i in range(dim_nums):
+            dim_col = dim_dic[i]
+            # print(dim_col)
+            tmplist = []
+            for j in dim_col:
+                tmplist.append(j * dim_col[j])
+            dim_alphat_list.append(Counter(''.join(tmplist)))
         # print(''.join(tmplist))
     # print(dim_alphat_list)
-    dim_rel = [[0 for j in range(dim_nums)] for i in range(dim_nums)]
-    for i in range(dim_nums):
-        for j in range(i + 1, dim_nums):
-            s = dim_alphat_list[i]['a'] + dim_alphat_list[i]['b'] + dim_alphat_list[i]['c'] + dim_alphat_list[i]['d'] + \
-                dim_alphat_list[j]['a'] + dim_alphat_list[j]['b'] + dim_alphat_list[j]['c'] + dim_alphat_list[j]['d']
-            s //= 2
-            difa = abs(dim_alphat_list[i]['a'] - dim_alphat_list[j]['a'])
-            difb = abs(dim_alphat_list[i]['b'] - dim_alphat_list[j]['b'])
-            difc = abs(dim_alphat_list[i]['c'] - dim_alphat_list[j]['c'])
-            difd = abs(dim_alphat_list[i]['d'] - dim_alphat_list[j]['d'])
-            # print(i, j)
-            if (difa + difb + difc + difd) / s >= 0.4:
-                dim_rel[i][j] += 1
+
+        for i in range(dim_nums):
+            for j in range(i + 1, dim_nums):
+                s = dim_alphat_list[i]['a'] + dim_alphat_list[i]['b'] + dim_alphat_list[i]['c'] + dim_alphat_list[i]['d'] + \
+                    dim_alphat_list[j]['a'] + dim_alphat_list[j]['b'] + dim_alphat_list[j]['c'] + dim_alphat_list[j]['d']
+                s //= 2
+                difa = abs(dim_alphat_list[i]['a'] - dim_alphat_list[j]['a'])
+                difb = abs(dim_alphat_list[i]['b'] - dim_alphat_list[j]['b'])
+                difc = abs(dim_alphat_list[i]['c'] - dim_alphat_list[j]['c'])
+                difd = abs(dim_alphat_list[i]['d'] - dim_alphat_list[j]['d'])
+                # print(i, j)
+                if (difa + difb + difc + difd) / s >= 0.4:
+                    dim_relation[i][j] += 1
 
     dim_list = []
     for a in range(0, dim_nums):
         for b in range(a, dim_nums):
             if a == b:
                 continue
-            dim_list.append([a, b, dim_rel[a][b]])
+            dim_list.append([a, b, dim_relation[a][b]])
     # print(dim_list)
     dim_list.sort(key=lambda t: t[2], reverse=True)
-    print(dim_list)
+    # print(dim_list)
+    dim_list = dim_list[:min(len(dim_list), int(len(dim_list) * 0.5) + 1)]
+    # print(dim_list)
+    cluster = {}
+    for v in dim_list:
+        if v[0] in cluster:
+            cluster[v[0]].append(v[1])
+        else:
+            cluster[v[0]] = [v[1]]
+
+    # 选取leader，通过list统计一下
+    leader_list = []
+    for i in cluster:
+        leader_list.append(i)
+        for j in cluster[i]:
+            leader_list.append(j)
+    counter = Counter(leader_list)
+    dim_choose2 = []
+    check_dim_choose = [False] * dim_nums
+
+    for k in cluster.keys():
+        tmpl = [k]
+        for a in cluster[k]:
+            tmpl.append(a)
+        choselst = []
+        for a in tmpl:
+            choselst.append([a, counter[a]])
+        choselst.sort(key=lambda x: x[1], reverse=True)
+        # print(choselst)
+        pkidx = 0
+        while True:
+            if not check_dim_choose[choselst[pkidx][0]]:
+                dim_choose2.append(choselst[pkidx][0])
+                break
+            else:
+                pkidx += 1
+                if pkidx == len(choselst):
+                    break
+        check_dim_choose[k] = True
+        for v in cluster[k]:
+            check_dim_choose[v] = True
+    for v in range(0, len(check_dim_choose)):
+        if not check_dim_choose[v]:
+            dim_choose2.append(v)
+    dim_choose2 = list(set(dim_choose2))
+    dim_choose2.sort()
+    dim_choose += dim_choose2
+    dim_choose = list(set(dim_choose))
+    # print(dim_choose)
+
     # print(dim_alphat_list)
 
     # print(dim_dic)
@@ -261,8 +306,8 @@ def run(times):
     data_train = data_train.transpose((1, 0, 2))
 
     old_to_new = {}
-    dim_choose.sort()
-    print(dim_choose)
+    # dim_choose.sort()
+    # print(dim_choose)
     for i in range(0, len(dim_choose)):
         old_to_new[i] = dim_choose[i]
 
