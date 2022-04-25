@@ -20,9 +20,9 @@ parser = argparse.ArgumentParser()
 # dataset settings
 parser.add_argument('--data_path', type=str, default="D://tmppro//data//",
                     help='the path of data.')
-parser.add_argument('--dataset', type=str, default="BasicMotions",  # NATOPS
+parser.add_argument('--dataset', type=str, default="NATOPS",  # NATOPS
                     help='time series dataset. Options: See the datasets list')
-parser.add_argument('--times', type=int, default=5, help='times to repeat')
+parser.add_argument('--times', type=int, default=1, help='times to repeat')
 args = parser.parse_args()
 
 
@@ -90,7 +90,7 @@ def run(times):
     # reduction
     print("starting dims reduction")
     random.seed(int(time.time()))
-    dim_relation = [[0] * dim_nums] * dim_nums
+    dim_relation = [[0 for _ in range(dim_nums)] for _ in range(dim_nums)]
     for s in range(0, sample_nums):
         sample = data_train[s]
         sax = computeSax(sample)
@@ -161,7 +161,7 @@ def run(times):
         for a in tmpl:
             choselst.append([a, counter[a]])
         choselst.sort(key=lambda x: x[1], reverse=True)
-        # print(choselst)
+        print(choselst)
         pkidx = 0
         while True:
             if not check_dim_choose[choselst[pkidx][0]]:

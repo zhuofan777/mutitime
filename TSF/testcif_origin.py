@@ -67,6 +67,7 @@ def run(times):
         #     计算两两维度之间的皮尔逊系数
         dim = data_train[train_size].shape[0]
         cor_matrix = abs(np.corrcoef(data_train[train_size]))
+        # print(cor_matrix)
         cor_matrix = np.where(cor_matrix >= 0.8, cor_matrix, 0)
         total_cor_matrix.append(cor_matrix)
     total_cor_matrix = np.array(total_cor_matrix)
