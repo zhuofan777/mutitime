@@ -10,6 +10,8 @@ import pandas as pd
 import sktime.utils.plotting as plot
 import numpy as np
 from sklearn.metrics import accuracy_score
+from FrameWork.SAX.saxpy import SAX
+
 import sfa
 import _mycif
 import diffStd
@@ -21,11 +23,11 @@ parser = argparse.ArgumentParser()
 # dataset settings
 parser.add_argument('--data_path', type=str, default="D://tmppro//data//",
                     help='the path of data.')
-# parser.add_argument('--dataset', type=str, default="AtrialFibrilation",  # NATOPS
-# parser.add_argument('--dataset', type=str, default="NATOPS",  # NATOPS
-parser.add_argument('--dataset', type=str, default="FaceDetection",  # NATOPS
+# parser.add_argument('--dataset', type=str, default="BasicMotions",  # NATOPS
+parser.add_argument('--dataset', type=str, default="NATOPS",  # NATOPS
+                    # parser.add_argument('--dataset', type=str, default="FaceDetection",  # NATOPS
                     help='time series dataset. Options: See the datasets list')
-parser.add_argument('--times', type=int, default=5, help='times to repeat')
+parser.add_argument('--times', type=int, default=1, help='times to repeat')
 args = parser.parse_args()
 
 
@@ -189,7 +191,7 @@ def run(times):
     #  低维 中维 高维
     # 0,1,2
     dim_flag = 0
-    if dim_nums < 10:
+    if dim_nums < 9:
         # print(data_train.shape)
         #  对每个维度生成一个差分序列
         for s in range(0, sample_nums):
@@ -215,199 +217,102 @@ def run(times):
         # print(data_train.shape)
         # update
 
-    elif 10 <= dim_nums < 11:
+    elif 10 <= dim_nums < 1000:
         dim_flag = 1
         # reduction
-        dims_cnt_pool = [0] * dim_nums
         print("starting dims reduction")
         random.seed(int(time.time()))
-        dim_relation = [[0 for j in range(dim_nums)] for i in range(dim_nums)]
+        sx = SAX(16, 4, 1e-6)
+        # all_hash_list = [[0 for _ in range(dim_nums)] for _ in range(5 * dim_nums)]
+        all_masked_list = []
+        mask_len = 5
+        rand_time = 3
         for s in range(0, sample_nums):
-            sample = data_train[s]
-            sax = computeSax(sample)
-            sax = sax.values
-            # sax里面是series，要转成ndarray
-
-            sax_list = []
-            for v in range(0, sax.shape[0]):
-                add = [0, 0, 0, 0]
-                tag = sax[v][0].index
-                res = list(sax[v][0].values)
-                for i in range(0, len(tag)):
-                    if tag[i] == 'a':
-                        add[0] += res[i]
-                    elif tag[i] == 'b':
-                        add[1] += res[i]
-                    elif tag[i] == 'c':
-                        add[2] += res[i]
-                    elif tag[i] == 'd':
-                        add[3] += res[i]
-                sax_list.append(add)
-            # print(sax_list)
-            for a in range(0, len(sax_list)):
-                for b in range(a, len(sax_list)):
-                    if a == b:
-                        continue
-                    sim = computeSim(sax_list[a], sax_list[b])
-                    # print(sim)
-                    if sim:
-                        dim_relation[a][b] += 1
-        dim_list = []
-        for a in range(0, dim_nums):
-            for b in range(a, dim_nums):
-                if a == b:
-                    continue
-                dim_list.append([a, b, dim_relation[a][b]])
-        # print(dim_list)
-        dim_list.sort(key=lambda t: t[2], reverse=True)
-        # 删减
-        # TODO 这里只取了前一般的出现的概率
-        dim_list = dim_list[:min(len(dim_list), int(len(dim_list) * 0.5) + 1)]
-        # print(dim_list)
-        cluster = {}
-        for v in dim_list:
-            if v[0] in cluster:
-                cluster[v[0]].append(v[1])
-            else:
-                cluster[v[0]] = [v[1]]
-
-        # 选取leader，通过list统计一下
-        leader_list = []
-        for i in cluster:
-            leader_list.append(i)
-            for j in cluster[i]:
-                leader_list.append(j)
-        counter = Counter(leader_list)
-        # print(counter)
-        # print(dim_list)
-        # print(cluster)
-        dim_choose = []
-        check_dim_choose = [False] * dim_nums
-
-        for k in cluster.keys():
-            tmpl = [k]
-            for a in cluster[k]:
-                tmpl.append(a)
-            choselst = []
-            for a in tmpl:
-                choselst.append([a, counter[a]])
-            choselst.sort(key=lambda x: x[1], reverse=True)
-            # print(choselst)
-            pkidx = 0
-            while True:
-                if not check_dim_choose[choselst[pkidx][0]]:
-                    dim_choose.append(choselst[pkidx][0])
-                    break
-                else:
-                    pkidx += 1
-                    if pkidx == len(choselst):
-                        break
-            check_dim_choose[k] = True
-            for v in cluster[k]:
-                check_dim_choose[v] = True
-        for v in range(0, len(check_dim_choose)):
-            if not check_dim_choose[v]:
-                dim_choose.append(v)
-        dim_choose = list(set(dim_choose))
-        dim_choose.sort()
-
-        # # sfa
-        dim_relation = [[0 for j in range(dim_nums)] for i in range(dim_nums)]
-        # print(dim_dic)
-        for i in range(sample_nums):
-            sample = data_train[i]
-            a = sfa.SFA(n_jobs=-1)
-            a.fit(sample)
-            b = a.transform(sample, data_test)
-            dim_dic = [collections.defaultdict(int) for i in range(dim_nums)]
-            #
-            for j in range(dim_nums):
-                dt = b[0][j]
-                for k in dt:
-                    # print(k,dt[k])
-                    dim_dic[j][k] += dt[k]
-
-            dim_alphat_list = []
-            for i in range(dim_nums):
-                dim_col = dim_dic[i]
-                # print(dim_col)
-                tmplist = []
-                for j in dim_col:
-                    tmplist.append(j * dim_col[j])
-                dim_alphat_list.append(Counter(''.join(tmplist)))
-            # print(''.join(tmplist))
-            # print(dim_alphat_list)
-
-            for i in range(dim_nums):
-                for j in range(i + 1, dim_nums):
-                    s = dim_alphat_list[i]['a'] + dim_alphat_list[i]['b'] + dim_alphat_list[i]['c'] + \
-                        dim_alphat_list[i]['d'] + \
-                        dim_alphat_list[j]['a'] + dim_alphat_list[j]['b'] + dim_alphat_list[j]['c'] + \
-                        dim_alphat_list[j]['d']
-                    s //= 2
-                    difa = abs(dim_alphat_list[i]['a'] - dim_alphat_list[j]['a'])
-                    difb = abs(dim_alphat_list[i]['b'] - dim_alphat_list[j]['b'])
-                    difc = abs(dim_alphat_list[i]['c'] - dim_alphat_list[j]['c'])
-                    difd = abs(dim_alphat_list[i]['d'] - dim_alphat_list[j]['d'])
-                    # print(i, j)
-                    if (difa + difb + difc + difd) / s >= 0.4:
-                        dim_relation[i][j] += 1
-
-        dim_list = []
-        for a in range(0, dim_nums):
-            for b in range(a, dim_nums):
-                if a == b:
-                    continue
-                dim_list.append([a, b, dim_relation[a][b]])
-        # print(dim_list)
-        dim_list.sort(key=lambda t: t[2], reverse=True)
-        # print(dim_list)
-        dim_list = dim_list[:min(len(dim_list), int(len(dim_list) * 0.5) + 1)]
-        # print(dim_list)
-        cluster = {}
-        for v in dim_list:
-            if v[0] in cluster:
-                cluster[v[0]].append(v[1])
-            else:
-                cluster[v[0]] = [v[1]]
-
-        # 选取leader，通过list统计一下
-        leader_list = []
-        for i in cluster:
-            leader_list.append(i)
-            for j in cluster[i]:
-                leader_list.append(j)
-        counter = Counter(leader_list)
-        dim_choose2 = []
-        check_dim_choose = [False] * dim_nums
-
-        for k in cluster.keys():
-            tmpl = [k]
-            for a in cluster[k]:
-                tmpl.append(a)
-            choselst = []
-            for a in tmpl:
-                choselst.append([a, counter[a]])
-            choselst.sort(key=lambda x: x[1], reverse=True)
-            # print(choselst)
-            pkidx = 0
-            while True:
-                if not check_dim_choose[choselst[pkidx][0]]:
-                    dim_choose2.append(choselst[pkidx][0])
-                    break
-                else:
-                    pkidx += 1
-                    if pkidx == len(choselst):
-                        break
-            check_dim_choose[k] = True
-            for v in cluster[k]:
-                check_dim_choose[v] = True
-        for v in range(0, len(check_dim_choose)):
-            if not check_dim_choose[v]:
-                dim_choose2.append(v)
-        dim_choose2 = list(set(dim_choose2))
-        dim_choose2.sort()
-        dim_choose += dim_choose2
+            # 每个样本单独判断相似度，再到全部样本上取相似度靠前的
+            sx_list = []
+            for d in range(0, dim_nums):
+                series = list(data_train[s][d])
+                lens = len(series)
+                # 分成5段，这里写死了
+                split = lens // 5
+                (letters1, _) = sx.to_letter_rep(series[split:])
+                (letters2, _) = sx.to_letter_rep(series[:split] + series[2 * split:])
+                (letters3, _) = sx.to_letter_rep(series[:2 * split] + series[3 * split])
+                (letters4, _) = sx.to_letter_rep(series[:3 * split] + series[4 * split])
+                (letters5, _) = sx.to_letter_rep(series[:4 * split])
+                sx_list.append([letters1, letters2, letters3, letters4, letters5])
+            rand_list = []
+            for _ in range(rand_time):
+                rand_int = randint(0, 15 - mask_len)
+                while rand_int in rand_list:
+                    rand_int = randint(0, 15 - mask_len)
+                rand_list.append(rand_int)
+            rand_list.sort()
+            total_masked_sax_list = []
+            # 随机次数 * 维度 * 5次分割
+            for i in range(rand_time):
+                masked_sax_list = []
+                for j in range(dim_nums):
+                    sx_word = sx_list[j]
+                    masked_list = []
+                    for k in range(5):
+                        masked_word = sx_word[k][:rand_list[i]] + sx_word[k][rand_list[i] + mask_len:]
+                        masked_list.append(np.array(masked_word))
+                    masked_sax_list.append(np.array(masked_list))
+                total_masked_sax_list.append(np.array(masked_sax_list))
+            all_masked_list.append(np.array(total_masked_sax_list))
+        # 样本数 * 随机次数 * 维度 * 5次分割
+        all_masked_list = np.array(all_masked_list)
+        # 维度 * 样本数 * 随机次数  * 5次分割
+        all_masked_list = np.transpose(all_masked_list, axes=(2, 0, 1, 3))
+        dim_dis_list = []
+        for d1 in range(dim_nums):
+            s1 = all_masked_list[d1]
+            for d2 in range(d1 + 1, dim_nums):
+                s2 = all_masked_list[d2]
+                total_hash_list = [[0 for _ in range(2)] for _ in range(5 * 2)]
+                for s in range(sample_nums):
+                    mask1 = s1[s]
+                    mask2 = s2[s]
+                    hash_list = [[0 for _ in range(2)] for _ in range(5 * 2)]
+                    for r in range(rand_time):
+                        d_dict = collections.defaultdict(list)
+                        for k in range(5):
+                            masked_word = mask1[r][k]
+                            d_dict[masked_word].append(0)
+                            masked_word = mask2[r][k]
+                            d_dict[masked_word].append(1)
+                        for k in range(5):
+                            masked_word = mask1[r][k]
+                            lst = d_dict[masked_word]
+                            for t in lst:
+                                hash_list[k][t] += 1
+                        for k in range(5):
+                            masked_word = mask2[r][k]
+                            lst = d_dict[masked_word]
+                            for t in lst:
+                                hash_list[k + 5][t] += 1
+                    for i in range(len(hash_list)):
+                        for j in range(len(hash_list[0])):
+                            total_hash_list[i][j] += hash_list[i][j]
+                ref = -1
+                for i in range(10):
+                    ref = max(total_hash_list[i][0],total_hash_list[i][1],ref)
+                dis_pow = 0
+                for i in range(10):
+                    dis_pow += abs(total_hash_list[i][1]-total_hash_list[i][0])
+                    t1 = abs(ref-total_hash_list[i][0])
+                    t2 = abs(ref-total_hash_list[i][1])
+                    dis_pow += abs(t1-t2)
+                ls = [dis_pow,d1,d2]
+                dim_dis_list.append(ls)
+        dim_dis_list.sort(reverse = True)
+        # top_k
+        dim_dis_list  = dim_dis_list[:min(7,len(dim_dis_list))]
+        # print(dim_dis_list)
+        for ls in dim_dis_list:
+            dim_choose.append(ls[1])
+            dim_choose.append(ls[2])
         dim_choose = list(set(dim_choose))
     else:
         dim_flag = 2
@@ -420,7 +325,8 @@ def run(times):
             else:
                 dim_pick = random.choices([i for i in range(dim_nums)])
         dim_choose = list(dim_choose)
-        # print(dim_choose)
+
+    print(dim_choose)
     if dim_flag != 0:
         # change dataset
         data_train = data_train.transpose((1, 0, 2))
